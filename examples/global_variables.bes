@@ -1,0 +1,43 @@
+
+# Global variables
+let a = "10";
+let b = "a";
+let _c = "4";
+let \c = "4";
+let c. = "4";
+let c1 = "4";
+# let c = "b";      # Error: 'c' and 'r' are invalid names
+# let B = "10";     # Error: 'b' is already defined; Excel is case insensitive
+let table = "$A$1:$D$10";
+let conditional = if "$A$1" {
+    s"Hello"
+} else {
+    s"World"
+};
+
+expr today = "TODAY()";
+let today_name = `today`;
+# Excel: 
+#   Name: today_name
+#   Value: =TODAY()
+
+let tomorrow_name = "`today` + 1";
+# Excel:
+#   Name: tomorrow_name
+#   Value: =TODAY() + 1
+
+fn func(a, b, _c) {
+    "a + b + c"
+}
+# Excel:
+#   Name: func
+#   Value: =LAMBDA(a, b, _c, a + b + c)
+
+## Not implemented yet
+# macro mac(a, b, _c) {
+#     "a + b + c"
+# }
+# let six = `mac(1, 2, 3)`;
+## Excel:
+##   Name: six
+##   Value: =1 + 2 + 3

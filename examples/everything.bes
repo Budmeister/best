@@ -1,0 +1,31 @@
+
+import global_variables;
+
+fn func() {
+    let a = "4";
+    let b = "a + 1";
+    let _c = "SUM(table)";
+
+    # Error:
+    # a = "3";      # Reassignment is illegal
+
+    if "a + b < _c" {
+        "a + b"
+    } else if "a + b + _c < 10" {
+        "a + b + _c"
+    } else {
+        "_c"
+    }
+}
+
+## Not implemented yet
+# fn func_lazy(a, b, _c) {
+#     let result = ifl "a + b < _c" {
+#         "a + b"
+#     } else if "a + b + _c < 10" {
+#         "a + b + _c"
+#     } else {
+#         "_c"
+#     }
+#     result
+# }

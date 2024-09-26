@@ -1,0 +1,9 @@
+antlr/
+.antlr/
+
+.vscode/
+.venv/
+__pycache__/
+
+build/
+parser/
