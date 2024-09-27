@@ -5,8 +5,13 @@ from parser.BesLexer import BesLexer
 from parser.BesParser import BesParser
 from parser.BesVisitor import BesVisitor
 
+errors = 0
+
 def unexpected_child(child):
-    raise ValueError(f"Unexpected {type(child)} child: {child.getText()}")
+    if hasattr(child, "getText"):
+        raise ValueError(f"Unexpected {type(child)} child: {child.getText()}")
+    else:
+        raise ValueError(f"Unexpected {type(child)} child: {child}")
 
 def validate_name(name: str):
     # TODO
@@ -78,13 +83,184 @@ def get_file_elements_rec(filepath, imported_files=None):
         
     return expr_stms, let_stms, fn_stms
 
+def stm_to_let(stm, lets, defines, local_defines):
+    global errors
+    if isinstance(stm, BesParser.LetStmContext):
+        identifier = stm.IDENTIFIER().getText()
+        expr = stm.expression()
+        formula = expr_to_formula(expr, defines, local_defines)
+        if identifier in lets:
+            print(f"ERROR: Redefinition of name `{identifier}` on line {stm.IDENTIFIER().symbol.line}")
+            errors += 1
+        lets[identifier] = formula
+    elif isinstance(stm, BesParser.ExprStmContext):
+        identifier = stm.IDENTIFIER().getText()
+        expr = stm.expression()
+        formula = expr_to_formula(expr, defines, local_defines)
+        if identifier in local_defines:
+            print(f"ERROR: Redefinition of name \"{identifier}\" on line {stm.IDENTIFIER().symbol.line}")
+            errors += 1
+        local_defines[identifier] = formula
+    elif isinstance(stm, BesParser.FunctionStmContext):
+        identifier = stm.IDENTIFIER().getText()
+        args = [id.getText() for id in stm.idList().IDENTIFIER()]
+        args = ",".join(args) + ("," if len(args) != 0 else "")
+        expr = stm.blockExpr()
+        body_formula = expr_to_formula(expr, defines, local_defines)
+        formula = f"LAMBDA({args}{body_formula})"
+        if identifier in lets:
+            print(f"ERROR: Redefinition of name `{identifier}` on line {stm.IDENTIFIER().symbol.line}")
+            errors += 1
+        lets[identifier] = formula
+    elif isinstance(stm, BesParser.StatementContext):
+        let_stm = stm.letStm()
+        if let_stm is not None:
+            return stm_to_let(let_stm, lets, defines, local_defines)
+        expr_stm = stm.exprStm()
+        if expr_stm is not None:
+            return stm_to_let(expr_stm, lets, defines, local_defines)
+        function_stm = stm.functionStm()
+        return stm_to_let(function_stm)
+    else:
+        unexpected_child(stm)
+
+def flatten_if_expr(if_expr):
+    ifs = []
+    condition = if_expr.expression()
+    value_if_true = if_expr.blockExpr(0)
+    ifs.append((condition, value_if_true))
+
+    value_if_false = if_expr.blockExpr(1)
+    if value_if_false is not None:
+        ifs.append(("TRUE", value_if_false))
+    else:
+        value_if_false = if_expr.ifExpr()
+        subsequent_ifs = flatten_if_expr(value_if_false)
+        ifs += subsequent_ifs
+    
+    return ifs
+
+def expand_definitions(string, defines, local_defines):
+    global errors
+    while "`" in string:
+        start = string.index("`")
+        end = string.index("`", start+1)
+
+        name = string[start+1:end]
+        if name in local_defines:
+            string = string[:start] + "(" + local_defines[name] + ")" + string[end+1:]
+        elif name in defines:
+            string = string[:start] + "(" + defines[name] + ")" + string[end+1:]
+        else:
+            print(f"ERROR: Unrecognized reference to name, `{name}`, in string, \"{string}\"")
+            errors += 1
+    return string
+
+def expr_to_formula(expr, defines, local_defines=None):
+    if local_defines is None:
+        local_defines = {}
+    if isinstance(expr, BesParser.BlockExprContext):
+        local_defines = local_defines.copy()
+        lets = {}
+
+        for stm in expr.statement():
+            stm_to_let(stm, lets, local_defines, defines)
+        
+        final_expr = expr_to_formula(expr.expression(), defines, local_defines)
+        if lets:
+            formula = "LET("
+            for name in lets:
+                formula = f"{formula}{name},{lets[name]},"
+            formula = f"{formula}{final_expr})"
+        else:
+            formula = final_expr
+        return formula
+        
+    elif isinstance(expr, BesParser.IfExprContext):
+        ifs = flatten_if_expr(expr)
+        if len(ifs) == 2:
+            # Regular if
+            condition, value_if_true = ifs[0]
+            value_if_false = ifs[1][1]
+            condition = expr_to_formula(condition, defines, local_defines)
+            value_if_true = expr_to_formula(value_if_true, defines, local_defines)
+            value_if_false = expr_to_formula(value_if_false, defines, local_defines)
+            formula = f"IF({condition}, {value_if_true}, {value_if_false})"
+        else:
+            formula = "IF("
+            for condition, value_if_true in ifs:
+                if condition != "TRUE":
+                    condition = expr_to_formula(condition, defines, local_defines)
+                value_if_true = expr_to_formula(value_if_true, defines, local_defines)
+                formula = f"{formula}{condition},{value_if_true},"
+
+            formula = f"{formula[:-1]})"
+        return formula
+
+    elif isinstance(expr, tree.Tree.TerminalNodeImpl):
+        if expr.getSymbol().type == BesLexer.FORMULA_LITERAL:
+            formula = expr.getText()[1:-1]
+            formula = expand_definitions(formula, defines, local_defines)
+        elif expr.getSymbol().type == BesLexer.STRING_LITERAL:
+            formula = expr.getText()[1:]
+        elif expr.getSymbol().type == BesLexer.DEFINED_EXPRESSION:
+            formula = expr.getText()
+            formula = expand_definitions(formula, defines, local_defines)
+        elif expr.getSymbol().type == BesLexer.IDENTIFIER:
+            name = expr.getText()
+            if name in local_defines:
+                formula = local_defines[name]
+            elif name in defines:
+                formula = defines[name]
+            else:
+                formula = name
+        else:
+            unexpected_child(expr)
+        return formula
+
+    elif isinstance(expr, BesParser.ExpressionContext):
+        block_expr = expr.blockExpr()
+        if block_expr is not None:
+            return expr_to_formula(block_expr, defines, local_defines)
+        if_expr = expr.ifExpr()
+        if if_expr is not None:
+            return expr_to_formula(if_expr, defines, local_defines)
+        formula_literal = expr.FORMULA_LITERAL()
+        if formula_literal is not None:
+            return expr_to_formula(formula_literal, defines, local_defines)
+        string_literal = expr.STRING_LITERAL()
+        if string_literal is not None:
+            return expr_to_formula(string_literal, defines, local_defines)
+        defined_expression = expr.DEFINED_EXPRESSION()
+        if defined_expression is not None:
+            return expr_to_formula(defined_expression, defines, local_defines)
+        identifier = expr.IDENTIFIER()
+        if identifier is not None:
+            return expr_to_formula(identifier)
+        expression = expr.expression()
+        return expr_to_formula(expression)
+    else:
+        unexpected_child(expr)
 
 def compile_file(filepath):
+    global errors
+    errors = 0
     expr_stms, let_stms, fn_stms = get_file_elements_rec(filepath)
-    for (stms, stms_name) in [(expr_stms, "expr_stms"), (let_stms, "let_stms"), (fn_stms, "fn_stms")]:
-        print(f"{stms_name}: ")
-        for stm in stms:
-            print(stm.getText())
+    lets = {}
+    defines = {}
+    for expr_stm in expr_stms:
+        stm_to_let(expr_stm, lets, defines.copy(), defines)
+    for let_stm in let_stms:
+        stm_to_let(let_stm, lets, defines.copy(), defines)
+    for fn_stm in fn_stms:
+        stm_to_let(fn_stm, lets, defines.copy(), defines)
+
+    for name in lets:
+        print(f"{name} = {lets[name]}")
+
+    if errors != 0:
+        print(f"Unable to compile due to {errors} errors")
+        return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Basic example of argparse with one positional argument.")

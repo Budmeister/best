@@ -26,12 +26,12 @@ let tomorrow_name = "`today` + 1";
 #   Name: tomorrow_name
 #   Value: =TODAY() + 1
 
-fn func(a, b, _c) {
-    "a + b + c"
+fn func2(a, b, _c) {
+    "a + b + _c"
 }
 # Excel:
 #   Name: func
-#   Value: =LAMBDA(a, b, _c, a + b + c)
+#   Value: =LAMBDA(a, b, _c, a + b + _c)
 
 ## Not implemented yet
 # macro mac(a, b, _c) {
