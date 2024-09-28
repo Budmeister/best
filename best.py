@@ -267,14 +267,14 @@ def compile_file(filepath):
 
     return lets
 
-BESC_MARKER = "===Compiled with Besc==="
+BEST_MARKER = "===Compiled with Best==="
 
 def store_lets(lets, wb, no_clear, overwrite):
     old_comments = {}
     if not no_clear:
         for name in list(wb.defined_names):
             defn = wb.defined_names[name]
-            if defn.comment is not None and BESC_MARKER in defn.comment:
+            if defn.comment is not None and BEST_MARKER in defn.comment:
                 old_comments[name] = defn.comment
                 del wb.defined_names[name]
     
@@ -283,7 +283,7 @@ def store_lets(lets, wb, no_clear, overwrite):
             errors += 1
             print(f"ERROR: Name {name} already defined in the workbook and `overwrite` was not passed in.")
             continue
-        comment = old_comments.get(name, BESC_MARKER)
+        comment = old_comments.get(name, BEST_MARKER)
         defn = DefinedName(name, comment=comment, attr_text=lets[name])
         wb.defined_names[name] = defn
 
@@ -296,7 +296,7 @@ def backup_file(filepath, backup_dir):
     shutil.copyfile(filepath, os.path.join(backup_dir, new_filename))
 
 def do(args, output_file):
-    if args.do == "clear-besc-defs":
+    if args.do == "clear-bes-defs":
         if not args.input:
             print("ERROR: To perform this action, you must provide an input")
             return
@@ -387,9 +387,9 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output", help="The output Excel file (defaults to input file if specified, or 'BesBook.xlsx')")
     parser.add_argument("-b", "--backup-dir", dest="backup_dir", help="The directory to put backups (defaults to ./backups)", default="./backups")
     parser.add_argument("--no-backup", dest="no_backup", help="Do not backup the input file before overwriting it", action="store_true")
-    parser.add_argument("--no-clear-defs", dest="no_clear", help="Do not remove old definitions created by Besc (non-Besc definitions are unaffected)", action="store_true")
+    parser.add_argument("--no-clear-defs", dest="no_clear", help="Do not remove old definitions created by Best (non-Best definitions are unaffected)", action="store_true")
     parser.add_argument("--overwrite-defs", dest="overwrite_defs", help="Overwrite existing definitions", action="store_true")
-    parser.add_argument("-d", "--do", help="Do an action instead of compiling a script", choices=["clear-besc-defs", "clear-defs", "print-defs", "delete-backups"])
+    parser.add_argument("-d", "--do", help="Do an action instead of compiling a script", choices=["clear-bes-defs", "clear-defs", "print-defs", "delete-backups"])
     
     args = parser.parse_args()
     main(args)
