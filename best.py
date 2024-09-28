@@ -9,7 +9,6 @@ from openpyxl.workbook.defined_name import DefinedName
 from antlr4 import *
 from parser.BesLexer import BesLexer
 from parser.BesParser import BesParser
-from parser.BesVisitor import BesVisitor
 
 errors = 0
 
@@ -291,7 +290,7 @@ def backup_file(filepath, backup_dir):
     os.makedirs(backup_dir, exist_ok=True)
     filename = os.path.basename(filepath)
     curtime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    new_filename = f"{filename[:-len(".xlsx")]}_{curtime}.xlsx"
+    new_filename = f"{filename[:-len('.xlsx')]}_{curtime}.xlsx"
 
     shutil.copyfile(filepath, os.path.join(backup_dir, new_filename))
 
