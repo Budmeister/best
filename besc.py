@@ -1,5 +1,11 @@
 import os
+import shutil
 import argparse
+from datetime import datetime
+
+from openpyxl import Workbook, load_workbook
+from openpyxl.workbook.defined_name import DefinedName
+
 from antlr4 import *
 from parser.BesLexer import BesLexer
 from parser.BesParser import BesParser
@@ -187,7 +193,7 @@ def expr_to_formula(expr, defines, local_defines=None):
             value_if_false = expr_to_formula(value_if_false, defines, local_defines)
             formula = f"IF({condition}, {value_if_true}, {value_if_false})"
         else:
-            formula = "IF("
+            formula = "IFS("
             for condition, value_if_true in ifs:
                 if condition != "TRUE":
                     condition = expr_to_formula(condition, defines, local_defines)
@@ -255,18 +261,136 @@ def compile_file(filepath):
     for fn_stm in fn_stms:
         stm_to_let(fn_stm, lets, defines.copy(), defines)
 
-    for name in lets:
-        print(f"{name} = {lets[name]}")
-
     if errors != 0:
         print(f"Unable to compile due to {errors} errors")
+        return None
+
+    return lets
+
+BESC_MARKER = "===Compiled with Besc==="
+
+def store_lets(lets, wb, no_clear, overwrite):
+    old_comments = {}
+    if not no_clear:
+        for name in list(wb.defined_names):
+            defn = wb.defined_names[name]
+            if defn.comment is not None and BESC_MARKER in defn.comment:
+                old_comments[name] = defn.comment
+                del wb.defined_names[name]
+    
+    for name in lets:
+        if name in wb.defined_names and not overwrite:
+            errors += 1
+            print(f"ERROR: Name {name} already defined in the workbook and `overwrite` was not passed in.")
+            continue
+        comment = old_comments.get(name, BESC_MARKER)
+        defn = DefinedName(name, comment=comment, attr_text=lets[name])
+        wb.defined_names[name] = defn
+
+def backup_file(filepath, backup_dir):
+    os.makedirs(backup_dir, exist_ok=True)
+    filename = os.path.basename(filepath)
+    curtime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    new_filename = f"{filename[:-len(".xlsx")]}_{curtime}.xlsx"
+
+    shutil.copyfile(filepath, os.path.join(backup_dir, new_filename))
+
+def do(args, output_file):
+    if args.do == "clear-besc-defs":
+        if not args.input:
+            print("ERROR: To perform this action, you must provide an input")
+            return
+        if not args.no_backup:
+            backup_file(args.input, args.backup_dir)
+        wb = load_workbook(args.input)
+        store_lets({}, wb, False, False)
+        wb.save(output_file)
+    elif args.do == "clear-defs":
+        if not args.input:
+            print("ERROR: To perform this action, you must provide an input")
+            return
+        if not args.no_backup:
+            backup_file(args.input, args.backup_dir)
+        wb = load_workbook(args.input)
+        for name in list(wb.defined_names):
+            del wb.defined_names[name]
+        wb.save(output_file)
+    elif args.do == "print-defs":
+        if not args.input:
+            print("ERROR: To perform this action, you must provide an input")
+            return
+        if not args.no_backup:
+            backup_file(args.input, args.backup_dir)
+        wb = load_workbook(args.input)
+        for name in wb.defined_names:
+            print(f"{name}: ")
+            if wb.defined_names[name].comment:
+                print(f"\tComment: {wb.defined_names[name].comment}")
+            print(f"\tValue: {wb.defined_names[name].attr_text}")
+    elif args.do == "delete-backups":
+        shutil.rmtree(args.backup_dir)
+    else:
+        print(f"ERROR: Unrecognized action: {args.do}")
+
+def main(args):
+    # Validate the output file
+    if args.output:
+        output_file = args.output
+        if not output_file.endswith(".xlsx"):
+            print(f"Invalid output file \"{args.input}\" - must end with \".xlsx\"")
+    elif args.input:
+        output_file = args.input
+    else:
+        output_file = "BesBook.xlsx"
+
+    # Validate the input file    
+    if args.input:
+        if not args.input.endswith(".xlsx"):
+            print(f"Invalid input file \"{args.input}\" - must end with \".xlsx\"")
+            return
+
+    if args.do:
+        do(args, output_file)
+        return
+    
+    if not args.script:
+        print("ERROR: Expected either --script or --do to be specified")
         return
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Basic example of argparse with one positional argument.")
+    lets = compile_file(args.script)
+    if lets is None:
+        return
+
+    if args.input:
+        if not args.no_backup:
+            backup_file(args.input, args.backup_dir)
+        wb = load_workbook(args.input)
+    else:
+        wb = Workbook()
+
+    store_lets(lets, wb, args.no_clear, args.overwrite_defs)
+
+    if errors != 0:
+        print(f"Unable to save the file because of {errors} errors")
+        return
     
-    parser.add_argument("filepath", help="The name of the file to compile")
+    wb.save(output_file)
+    
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Transpiler from Bud Excel Script to Excel Workbook.")
+    
+    parser.add_argument("-s", "--script", help="The name of the Bes file to compile")
+    
+    # Config
+    parser.add_argument("-i", "--input", help="The Excel file to modify")
+    parser.add_argument("-o", "--output", help="The output Excel file (defaults to input file if specified, or 'BesBook.xlsx')")
+    parser.add_argument("-b", "--backup-dir", dest="backup_dir", help="The directory to put backups (defaults to ./backups)", default="./backups")
+    parser.add_argument("--no-backup", dest="no_backup", help="Do not backup the input file before overwriting it", action="store_true")
+    parser.add_argument("--no-clear-defs", dest="no_clear", help="Do not remove old definitions created by Besc (non-Besc definitions are unaffected)", action="store_true")
+    parser.add_argument("--overwrite-defs", dest="overwrite_defs", help="Overwrite existing definitions", action="store_true")
+    parser.add_argument("-d", "--do", help="Do an action instead of compiling a script", choices=["clear-besc-defs", "clear-defs", "print-defs", "delete-backups"])
     
     args = parser.parse_args()
-    
-    compile_file(args.filepath)
+    main(args)
+

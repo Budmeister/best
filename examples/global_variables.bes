@@ -8,8 +8,8 @@ let c. = "4";
 let c1 = "4";
 # let c = "b";      # Error: 'c' and 'r' are invalid names
 # let B = "10";     # Error: 'b' is already defined; Excel is case insensitive
-let table = "$A$1:$D$10";
-let conditional = if "$A$1" {
+let table = "Sheet1!$A$1:$D$10";
+let conditional = if "Sheet1!$A$1" {
     s"Hello"
 } else {
     s"World"
