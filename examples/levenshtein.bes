@@ -1,0 +1,69 @@
+
+fn lev(a,b,[ii],[jj],[arr]) {
+    # Setup initial parameters
+    let i = if "ISOMITTED(ii)" { "1" } else { ii };
+    let j = if "ISOMITTED(jj)" { "1" } else { jj };
+    let a_i = "MID(a,i,1)";
+    let b_j = "MID(b,j,1)";
+
+    fn init_array_gen(r, c) {
+        if "r = 1" {
+            "c-1"
+        } else if "c = 1" {
+            "r-1"
+        } else {
+            "0"
+        }
+    }
+    let init_array = "MAKEARRAY(
+        LEN(a)+1,
+        LEN(b)+1,
+        init_array_gen
+    )";
+
+    # Calculate new array entry
+    let cost = "N(NOT(a_i=b_j))";
+    let this_arr = if "ISOMITTED(arr)" { init_array } else { arr };
+    let option_a = "INDEX(this_arr, i+1-1, j+1)   + 1";
+    let option_b = "INDEX(this_arr, i+1,   j+1-1) + 1";
+    let option_c = "INDEX(this_arr, i+1-1, j+1-1) + cost";
+    let new_val = "MIN(option_a, option_b, option_c)";
+    
+    fn overlay_gen(r, c) {
+        if "AND(r=i+1,c=j+1)" {
+            new_val
+        } else {
+            "0"
+        }
+    }
+    let overlay = "MAKEARRAY(
+        LEN(a)+1,
+        LEN(b)+1,
+        overlay_gen
+    )";
+    let new_arr = "this_arr + overlay";
+
+    # Recurse
+    let new_i = if "i=LEN(a)" {
+        if "j=LEN(b)" {
+            "i+1"
+        } else {
+            "1"
+        }
+    } else {
+        "i+1"
+    };
+    let new_j = if "i<>LEN(a)" {
+        "j"
+    } else if "j=LEN(b)" {
+        "j+1"
+    } else {
+        "j+1"
+    };
+    let is_end = "AND(new_i > LEN(a), new_j > LEN(b))";
+    if is_end {
+        new_val
+    } else {
+        "lev(a, b, new_i, new_j, new_arr)"
+    }
+}

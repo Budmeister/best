@@ -1,0 +1,26 @@
+
+fn fib(i) {
+    ifl "i <= 0" {
+        "0"
+    } else if "i = 1" {
+        "1"
+    } else {
+        "fib(i - 1) + fib(i - 2)"
+    }
+}
+
+# fib2 is an illegal name as it references a cell (column FIB, row 2)
+# Surprisingly, names are allowed to start with \
+fn \fib2(i) {
+    "fib2_rec(0, 1, i)"
+}
+
+fn fib2_rec(a, b, i) {
+    ifl "i <= 0" {
+        "a"
+    } else if "i = 1" {
+        "b"
+    } else {
+        "fib2_rec(b, a + b, i - 1)"
+    }
+}
