@@ -109,9 +109,15 @@ ifExpr
     |   IF expression blockExpr ELSE ifExpr
     ;
 
+iflExpr
+    :   IFL expression blockExpr ELSE blockExpr
+    |   IFL expression blockExpr ELSE ifExpr
+    ;
+
 expression
     :   blockExpr
     |   ifExpr
+    |   iflExpr
     |   FORMULA_LITERAL
     |   STRING_LITERAL
     |   DEFINED_EXPRESSION

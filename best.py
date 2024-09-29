@@ -201,6 +201,27 @@ def expr_to_formula(expr, defines, local_defines=None):
 
             formula = f"{formula[:-1]})"
         return formula
+        
+    elif isinstance(expr, BesParser.IflExprContext):
+        ifs = flatten_if_expr(expr)
+        if len(ifs) == 2:
+            # Regular if
+            condition, value_if_true = ifs[0]
+            value_if_false = ifs[1][1]
+            condition = expr_to_formula(condition, defines, local_defines)
+            value_if_true = expr_to_formula(value_if_true, defines, local_defines)
+            value_if_false = expr_to_formula(value_if_false, defines, local_defines)
+            formula = f"IF({condition}, LAMBDA({value_if_true}), LAMBDA({value_if_false}))()"
+        else:
+            formula = "IFS("
+            for condition, value_if_true in ifs:
+                if condition != "TRUE":
+                    condition = expr_to_formula(condition, defines, local_defines)
+                value_if_true = expr_to_formula(value_if_true, defines, local_defines)
+                formula = f"{formula}{condition},LAMBDA({value_if_true}),"
+
+            formula = f"{formula[:-1]})()"
+        return formula
 
     elif isinstance(expr, tree.Tree.TerminalNodeImpl):
         if expr.getSymbol().type == BesLexer.FORMULA_LITERAL:
@@ -230,6 +251,9 @@ def expr_to_formula(expr, defines, local_defines=None):
         if_expr = expr.ifExpr()
         if if_expr is not None:
             return expr_to_formula(if_expr, defines, local_defines)
+        ifl_expr = expr.iflExpr()
+        if ifl_expr is not None:
+            return expr_to_formula(ifl_expr, defines, local_defines)
         formula_literal = expr.FORMULA_LITERAL()
         if formula_literal is not None:
             return expr_to_formula(formula_literal, defines, local_defines)
@@ -241,9 +265,9 @@ def expr_to_formula(expr, defines, local_defines=None):
             return expr_to_formula(defined_expression, defines, local_defines)
         identifier = expr.IDENTIFIER()
         if identifier is not None:
-            return expr_to_formula(identifier)
+            return expr_to_formula(identifier, defines, local_defines)
         expression = expr.expression()
-        return expr_to_formula(expression)
+        return expr_to_formula(expression, defines, local_defines)
     else:
         unexpected_child(expr)
 
@@ -314,7 +338,7 @@ def do(args, output_file):
         for name in list(wb.defined_names):
             del wb.defined_names[name]
         wb.save(output_file)
-    elif args.do == "print-defs":
+    elif args.do == "print-defs" or args.do == "print-defs-full":
         if not args.input:
             print("ERROR: To perform this action, you must provide an input")
             return
@@ -323,9 +347,12 @@ def do(args, output_file):
         wb = load_workbook(args.input)
         for name in wb.defined_names:
             print(f"{name}: ")
-            if wb.defined_names[name].comment:
-                print(f"\tComment: {wb.defined_names[name].comment}")
-            print(f"\tValue: {wb.defined_names[name].attr_text}")
+            if args.do == "print-defs":
+                if wb.defined_names[name].comment:
+                    print(f"\tComment: {wb.defined_names[name].comment}")
+                print(f"\tValue: {wb.defined_names[name].attr_text}")
+            else:
+                print(f"\t{wb.defined_names[name]}")
     elif args.do == "delete-backups":
         shutil.rmtree(args.backup_dir)
     else:
@@ -388,7 +415,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-backup", dest="no_backup", help="Do not backup the input file before overwriting it", action="store_true")
     parser.add_argument("--no-clear-defs", dest="no_clear", help="Do not remove old definitions created by Best (non-Best definitions are unaffected)", action="store_true")
     parser.add_argument("--overwrite-defs", dest="overwrite_defs", help="Overwrite existing definitions", action="store_true")
-    parser.add_argument("-d", "--do", help="Do an action instead of compiling a script", choices=["clear-bes-defs", "clear-defs", "print-defs", "delete-backups"])
+    parser.add_argument("-d", "--do", help="Do an action instead of compiling a script", choices=["clear-bes-defs", "clear-defs", "print-defs", "print-defs-full", "delete-backups"])
     
     args = parser.parse_args()
     main(args)
