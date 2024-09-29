@@ -78,8 +78,13 @@ importDecl
     :   'import' IDENTIFIER ';'
     ;
 
+possiblyBracketedIdentifier
+    :   IDENTIFIER
+    |   '[' IDENTIFIER ']'
+    ;
+
 idList
-    :   (IDENTIFIER (',' IDENTIFIER)*)?
+    :   (possiblyBracketedIdentifier (',' possiblyBracketedIdentifier)*)?
     ;
 
 functionStm

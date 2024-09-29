@@ -140,9 +140,18 @@ def stm_to_let(stm, lets, defines, local_defines):
         local_defines[identifier] = formula
     elif isinstance(stm, BesParser.FunctionStmContext):
         identifier = stm.IDENTIFIER().getText()
-        args = [(id.getText(), validate_name(id.getText(), id.symbol.line))[0] for id in stm.idList().IDENTIFIER()]
-        defined_arg_regex = compile_formula_id_regex(args)
-        args = ",".join(f"_xlpm.{arg}" for arg in args) + ("," if len(args) != 0 else "")
+        matchable_args = []
+        args = ""
+        for bracketedId in stm.idList().possiblyBracketedIdentifier():
+            id = bracketedId.IDENTIFIER().getText()
+            validate_name(id, bracketedId.IDENTIFIER().symbol.line)
+            bracketed = bracketedId.getText().startswith("[")
+            matchable_args.append(id)
+            if bracketed:
+                args = f"{args}_xlop.{id},"
+            else:
+                args = f"{args}_xlpm.{id},"
+        defined_arg_regex = compile_formula_id_regex(matchable_args)
         expr = stm.blockExpr()
         body_formula = expr_to_formula(expr, defines, local_defines)
         if args:
@@ -161,7 +170,7 @@ def stm_to_let(stm, lets, defines, local_defines):
         if expr_stm is not None:
             return stm_to_let(expr_stm, lets, defines, local_defines)
         function_stm = stm.functionStm()
-        return stm_to_let(function_stm)
+        return stm_to_let(function_stm, lets, defines, local_defines)
     else:
         unexpected_child(stm)
 
