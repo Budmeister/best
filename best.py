@@ -2,6 +2,7 @@ import os
 import shutil
 import argparse
 from datetime import datetime
+import re
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.workbook.defined_name import DefinedName
@@ -10,7 +11,17 @@ from antlr4 import *
 from parser.BesLexer import BesLexer
 from parser.BesParser import BesParser
 
+import versioned_formulae as vf
+
 errors = 0
+
+def compile_formula_id_regex(ids):
+    patterns = [rf"(?<![a-zA-Z_\\])\b{re.escape(id)}\b(?![a-zA-Z0-9_\\.])" for id in ids]
+    combined_patern = re.compile('|'.join(patterns))
+    return combined_patern
+
+def compile_xlfn_regex():
+    return compile_formula_id_regex(vf.versioned_formulae)
 
 def unexpected_child(child):
     if hasattr(child, "getText"):
@@ -109,9 +120,13 @@ def stm_to_let(stm, lets, defines, local_defines):
     elif isinstance(stm, BesParser.FunctionStmContext):
         identifier = stm.IDENTIFIER().getText()
         args = [id.getText() for id in stm.idList().IDENTIFIER()]
-        args = ",".join(args) + ("," if len(args) != 0 else "")
+        defined_arg_regex = compile_formula_id_regex(args)
+        args = ",".join(f"_xlpm.{arg}" for arg in args) + ("," if len(args) != 0 else "")
         expr = stm.blockExpr()
         body_formula = expr_to_formula(expr, defines, local_defines)
+        if args:
+            # Replace parameter "a" with "_xlpm.a". In Excel it still looks like "a", but in the code they store it differently.
+            body_formula = defined_arg_regex.sub(lambda match: f"_xlpm.{match.group(0)}", body_formula)
         formula = f"LAMBDA({args}{body_formula})"
         if identifier in lets:
             print(f"ERROR: Redefinition of name `{identifier}` on line {stm.IDENTIFIER().symbol.line}")
@@ -173,10 +188,20 @@ def expr_to_formula(expr, defines, local_defines=None):
         
         final_expr = expr_to_formula(expr.expression(), defines, local_defines)
         if lets:
+            names_so_far = []
             formula = "LET("
             for name in lets:
-                formula = f"{formula}{name},{lets[name]},"
-            formula = f"{formula}{final_expr})"
+                if names_so_far:
+                    # Replace parameter "a" with "_xlpm.a". In Excel it still looks like "a", but in the code they store it differently.
+                    defined_let_regex = compile_formula_id_regex(names_so_far)
+                    value = defined_let_regex.sub(lambda match: f"_xlpm.{match.group(0)}", lets[name])
+                else:
+                    value = lets[name]
+                formula = f"{formula}_xlpm.{name},{value},"
+                names_so_far.append(name)
+            defined_let_regex = compile_formula_id_regex(names_so_far)
+            final_value = defined_let_regex.sub(lambda match: f"_xlpm.{match.group(0)}", final_expr)
+            formula = f"{formula}{final_value})"
         else:
             formula = final_expr
         return formula
@@ -287,6 +312,15 @@ def compile_file(filepath):
     if errors != 0:
         print(f"Unable to compile due to {errors} errors")
         return None
+    
+    # Functions introduced into Excel after 2007 are stored in the code with the 
+    # prefix, "_xlfn.", so we have to put it into the code with that prefix.
+    versioned_formula_regex = compile_xlfn_regex()
+
+    for name in lets:
+        defn = lets[name]
+        defn = versioned_formula_regex.sub(lambda match: f"_xlfn.{match.group(0)}", defn)
+        lets[name] = defn
 
     return lets
 
