@@ -23,15 +23,37 @@ def compile_formula_id_regex(ids):
 def compile_xlfn_regex():
     return compile_formula_id_regex(vf.versioned_formulae)
 
+RED = "\033[31m"
+YELLOW = "\033[33m"
+RESET = "\033[0m"
+
+def error(msg):
+    global errors
+    errors += 1
+    print(f"{RED}ERROR: {msg}{RESET}")
+
+def warning(msg):
+    print(f"{YELLOW}WARNING: {msg}{RESET}")
+
 def unexpected_child(child):
     if hasattr(child, "getText"):
-        raise ValueError(f"Unexpected {type(child)} child: {child.getText()}")
+        error(f"Unexpected {type(child)} child: {child.getText()}")
     else:
-        raise ValueError(f"Unexpected {type(child)} child: {child}")
+        error(f"Unexpected {type(child)} child: {child}")
 
-def validate_name(name: str):
-    # TODO
-    return True
+a1_pattern = re.compile(r"^[a-zA-Z]{1,3}[1-9][0-9]*$")
+r1c1_pattern = re.compile(r"^R[1-9][0-9]*C[1-9][0-9]*$")
+
+def validate_name(name: str, line):
+    if re.match(a1_pattern, name):
+        error(f"The name, `{name}`, (line {line}) is not valid since it is an A1-style reference to a cell.")
+        return
+    if re.match(r1c1_pattern, name):
+        error(f"The name, `{name}`, (line {line}) is not valid since it is an R1C1-style reference to a cell.")
+        return
+    if len(name) > 250:
+        error(f"The name, `{name}`, (line {line}) is not valid since it contains more than 250 characters.")
+        return
 
 def parse_file(filename):
     with open(filename, "r") as file:
@@ -100,26 +122,25 @@ def get_file_elements_rec(filepath, imported_files=None):
     return expr_stms, let_stms, fn_stms
 
 def stm_to_let(stm, lets, defines, local_defines):
-    global errors
     if isinstance(stm, BesParser.LetStmContext):
         identifier = stm.IDENTIFIER().getText()
         expr = stm.expression()
         formula = expr_to_formula(expr, defines, local_defines)
         if identifier in lets:
-            print(f"ERROR: Redefinition of name `{identifier}` on line {stm.IDENTIFIER().symbol.line}")
-            errors += 1
+            error(f"Redefinition of name `{identifier}` on line {stm.IDENTIFIER().symbol.line}")
+        validate_name(identifier, stm.IDENTIFIER().symbol.line)
         lets[identifier] = formula
     elif isinstance(stm, BesParser.ExprStmContext):
         identifier = stm.IDENTIFIER().getText()
         expr = stm.expression()
         formula = expr_to_formula(expr, defines, local_defines)
         if identifier in local_defines:
-            print(f"ERROR: Redefinition of name \"{identifier}\" on line {stm.IDENTIFIER().symbol.line}")
-            errors += 1
+            error(f"Redefinition of name \"{identifier}\" on line {stm.IDENTIFIER().symbol.line}")
+        validate_name(identifier, stm.IDENTIFIER().symbol.line)
         local_defines[identifier] = formula
     elif isinstance(stm, BesParser.FunctionStmContext):
         identifier = stm.IDENTIFIER().getText()
-        args = [id.getText() for id in stm.idList().IDENTIFIER()]
+        args = [(id.getText(), validate_name(id.getText(), id.symbol.line))[0] for id in stm.idList().IDENTIFIER()]
         defined_arg_regex = compile_formula_id_regex(args)
         args = ",".join(f"_xlpm.{arg}" for arg in args) + ("," if len(args) != 0 else "")
         expr = stm.blockExpr()
@@ -129,8 +150,8 @@ def stm_to_let(stm, lets, defines, local_defines):
             body_formula = defined_arg_regex.sub(lambda match: f"_xlpm.{match.group(0)}", body_formula)
         formula = f"LAMBDA({args}{body_formula})"
         if identifier in lets:
-            print(f"ERROR: Redefinition of name `{identifier}` on line {stm.IDENTIFIER().symbol.line}")
-            errors += 1
+            error(f"Redefinition of name `{identifier}` on line {stm.IDENTIFIER().symbol.line}")
+        validate_name(identifier, stm.IDENTIFIER().symbol.line)
         lets[identifier] = formula
     elif isinstance(stm, BesParser.StatementContext):
         let_stm = stm.letStm()
@@ -161,7 +182,6 @@ def flatten_if_expr(if_expr):
     return ifs
 
 def expand_definitions(string, defines, local_defines):
-    global errors
     while "`" in string:
         start = string.index("`")
         end = string.index("`", start+1)
@@ -172,8 +192,7 @@ def expand_definitions(string, defines, local_defines):
         elif name in defines:
             string = string[:start] + "(" + defines[name] + ")" + string[end+1:]
         else:
-            print(f"ERROR: Unrecognized reference to name, `{name}`, in string, \"{string}\"")
-            errors += 1
+            error(f"Unrecognized reference to name, `{name}`, in string, \"{string}\"")
     return string
 
 def expr_to_formula(expr, defines, local_defines=None):
@@ -337,8 +356,7 @@ def store_lets(lets, wb, no_clear, overwrite):
     
     for name in lets:
         if name in wb.defined_names and not overwrite:
-            errors += 1
-            print(f"ERROR: Name {name} already defined in the workbook and `overwrite` was not passed in.")
+            error(f"Name {name} already defined in the workbook and `overwrite` was not passed in.")
             continue
         comment = old_comments.get(name, BEST_MARKER)
         defn = DefinedName(name, comment=comment, attr_text=lets[name])
@@ -390,7 +408,7 @@ def do(args, output_file):
     elif args.do == "delete-backups":
         shutil.rmtree(args.backup_dir)
     else:
-        print(f"ERROR: Unrecognized action: {args.do}")
+        error(f"Unrecognized action: {args.do}")
 
 def main(args):
     # Validate the output file
