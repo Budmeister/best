@@ -279,6 +279,7 @@ def expr_to_formula(expr, defines, local_defines=None):
     elif isinstance(expr, tree.Tree.TerminalNodeImpl):
         if expr.getSymbol().type == BesLexer.FORMULA_LITERAL:
             formula = expr.getText()[1:-1]
+            formula = bytes(formula, 'utf-8').decode('unicode_escape')
             formula = expand_definitions(formula, defines, local_defines)
         elif expr.getSymbol().type == BesLexer.STRING_LITERAL:
             formula = expr.getText()[1:]
