@@ -1,6 +1,6 @@
 
 fn fib(i) {
-    ifl "i <= 0" {
+    if "i <= 0" {
         "0"
     } else if "i = 1" {
         "1"
@@ -16,7 +16,7 @@ fn \fib2(i) {
 }
 
 fn fib2_rec(a, b, i) {
-    ifl "i <= 0" {
+    if "i <= 0" {
         "a"
     } else if "i = 1" {
         "b"

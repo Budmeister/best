@@ -17,14 +17,3 @@ fn func() {
         "_c"
     }
 }
-
-fn func_lazy(a, b, _c) {
-    let result = ifl "a + b < _c" {
-        "a + b"
-    } else if "a + b + _c < 10" {
-        "a + b + _c"
-    } else {
-        "_c"
-    };
-    result
-}

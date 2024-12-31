@@ -257,27 +257,6 @@ def expr_to_formula(expr, defines, local_defines=None):
 
             formula = f"{formula[:-1]})"
         return formula
-        
-    elif isinstance(expr, BesParser.IflExprContext):
-        ifs = flatten_if_expr(expr)
-        if len(ifs) == 2:
-            # Regular if
-            condition, value_if_true = ifs[0]
-            value_if_false = ifs[1][1]
-            condition = expr_to_formula(condition, defines, local_defines)
-            value_if_true = expr_to_formula(value_if_true, defines, local_defines)
-            value_if_false = expr_to_formula(value_if_false, defines, local_defines)
-            formula = f"IF({condition}, LAMBDA({value_if_true}), LAMBDA({value_if_false}))()"
-        else:
-            formula = "IFS("
-            for condition, value_if_true in ifs:
-                if condition != "TRUE":
-                    condition = expr_to_formula(condition, defines, local_defines)
-                value_if_true = expr_to_formula(value_if_true, defines, local_defines)
-                formula = f"{formula}{condition},LAMBDA({value_if_true}),"
-
-            formula = f"{formula[:-1]})()"
-        return formula
 
     elif isinstance(expr, tree.Tree.TerminalNodeImpl):
         if expr.getSymbol().type == BesLexer.FORMULA_LITERAL:
@@ -308,9 +287,6 @@ def expr_to_formula(expr, defines, local_defines=None):
         if_expr = expr.ifExpr()
         if if_expr is not None:
             return expr_to_formula(if_expr, defines, local_defines)
-        ifl_expr = expr.iflExpr()
-        if ifl_expr is not None:
-            return expr_to_formula(ifl_expr, defines, local_defines)
         formula_literal = expr.FORMULA_LITERAL()
         if formula_literal is not None:
             return expr_to_formula(formula_literal, defines, local_defines)
