@@ -56,6 +56,7 @@ def validate_name(name: str, line):
         return
 
 def parse_file(filename):
+    print(f"In file: {filename}")
     with open(filename, "r") as file:
         contents = file.read()
 
@@ -75,6 +76,8 @@ def get_file_elements_rec(filepath, imported_files=None):
 
     if filepath in imported_files:
         return [], [], []
+
+    imported_files.add(filepath)
 
     parsed_file = parse_file(filepath)
     children = parsed_file.getChildren()
@@ -114,7 +117,7 @@ def get_file_elements_rec(filepath, imported_files=None):
             raise ValueError(f"Illegal import name: {identifier}")
         new_filepath = os.path.join(current_dir, f"{identifier}.bes")
 
-        new_expr_stms, new_let_stms, new_fn_stms = get_file_elements_rec(new_filepath)
+        new_expr_stms, new_let_stms, new_fn_stms = get_file_elements_rec(new_filepath, imported_files)
         expr_stms += new_expr_stms
         let_stms += new_let_stms
         fn_stms += new_fn_stms
@@ -413,6 +416,7 @@ def do(args, output_file):
                 if wb.defined_names[name].comment:
                     print(f"\tComment: {wb.defined_names[name].comment}")
                 print(f"\tValue: {wb.defined_names[name].attr_text}")
+                print()
             else:
                 print(f"\t{wb.defined_names[name]}")
     elif args.do == "delete-backups":
