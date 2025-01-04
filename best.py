@@ -15,6 +15,14 @@ import versioned_formulae as vf
 
 errors = 0
 
+current_identifier = 0
+
+def get_unique_identifier():
+    global current_identifier
+    id = f"__best_id_{current_identifier}"
+    current_identifier += 1
+    return id
+
 def compile_formula_id_regex(ids):
     patterns = [rf"(?<![a-zA-Z_\\])\b{re.escape(id)}\b(?![a-zA-Z0-9_\\.])" for id in ids]
     combined_patern = re.compile('|'.join(patterns))
@@ -257,6 +265,40 @@ def expr_to_formula(expr, defines, local_defines=None):
 
             formula = f"{formula[:-1]})"
         return formula
+    
+    elif isinstance(expr, BesParser.SingleArrayComprehensionContext):
+        row = expr.ROW()
+        item, upto = expr.expression()
+        if row is not None:
+            # Row vector
+            num_rows = "1"
+            row_id = get_unique_identifier()
+            num_cols = expr_to_formula(upto, defines, local_defines)
+            col_id = expr.IDENTIFIER().getText()
+        else:
+            num_rows = expr_to_formula(upto, defines, local_defines)
+            row_id = expr.IDENTIFIER().getText()
+            num_cols = "1"
+            col_id = get_unique_identifier()
+        item_formula = expr_to_formula(item, defines, local_defines)
+
+        defined_arg_regex = compile_formula_id_regex([row_id, col_id])
+        item_formula = defined_arg_regex.sub(lambda match: f"_xlpm.{match.group(0)}", item_formula)
+
+        lambda_ = f"LAMBDA(_xlpm.{row_id}, _xlpm.{col_id}, {item_formula})"
+        formula = f"MAKEARRAY({num_rows}, {num_cols}, {lambda_})"
+        return formula
+
+    elif isinstance(expr, BesParser.DoubleArrayComprehensionContext):
+        item_formula, num_rows, num_cols = [expr_to_formula(x, defines, local_defines) for x in expr.expression()]
+        row_id, col_id = [x.getText() for x in expr.IDENTIFIER()]
+
+        defined_arg_regex = compile_formula_id_regex([row_id, col_id])
+        item_formula = defined_arg_regex.sub(lambda match: f"_xlpm.{match.group(0)}", item_formula)
+
+        lambda_ = f"LAMBDA(_xlpm.{row_id}, _xlpm.{col_id}, {item_formula})"
+        formula = f"MAKEARRAY({num_rows}, {num_cols}, {lambda_})"
+        return formula
 
     elif isinstance(expr, tree.Tree.TerminalNodeImpl):
         if expr.getSymbol().type == BesLexer.FORMULA_LITERAL:
@@ -287,6 +329,12 @@ def expr_to_formula(expr, defines, local_defines=None):
         if_expr = expr.ifExpr()
         if if_expr is not None:
             return expr_to_formula(if_expr, defines, local_defines)
+        single_array_comprehension = expr.singleArrayComprehension()
+        if single_array_comprehension is not None:
+            return expr_to_formula(single_array_comprehension, defines, local_defines)
+        double_array_comprehension = expr.doubleArrayComprehension()
+        if double_array_comprehension is not None:
+            return expr_to_formula(double_array_comprehension, defines, local_defines)
         formula_literal = expr.FORMULA_LITERAL()
         if formula_literal is not None:
             return expr_to_formula(formula_literal, defines, local_defines)

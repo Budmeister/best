@@ -42,6 +42,22 @@ ELSE
     :   'else'
     ;
 
+FOR
+    :   'for'
+    ;
+
+UPTO
+    :   'upto'
+    ;
+
+ROW
+    :   'row'
+    ;
+
+COLUMN
+    :   'column'
+    ;
+
 
 
 fragment ESCAPABLE_CHAR
@@ -110,9 +126,19 @@ ifExpr
     |   IF expression blockExpr ELSE ifExpr
     ;
 
+singleArrayComprehension
+    :   (ROW | COLUMN)? '[' expression FOR IDENTIFIER UPTO expression ']'
+    ;
+
+doubleArrayComprehension
+    :   '[[' expression FOR IDENTIFIER UPTO expression ',' IDENTIFIER UPTO expression ']]'
+    ;
+
 expression
     :   blockExpr
     |   ifExpr
+    |   singleArrayComprehension
+    |   doubleArrayComprehension
     |   FORMULA_LITERAL
     |   STRING_LITERAL
     |   DEFINED_EXPRESSION
